@@ -4,6 +4,115 @@ its a script that does everything awesome at all times
 ## Requirements
 fzf and tmux
 
+## Installation
+
+### Using Nix Flakes
+
+This project provides a Nix Flake for declarative configuration with Home Manager, supporting both NixOS and Darwin (macOS).
+
+#### Quick Start with Nix
+
+To try tmux-sessionizer without installing:
+```bash
+nix run github:saberzero1/tmux-sessionizer
+```
+
+To install directly:
+```bash
+nix profile install github:saberzero1/tmux-sessionizer
+```
+
+#### Home Manager Configuration
+
+Add the flake to your Home Manager configuration:
+
+1. Add the input to your `flake.nix`:
+```nix
+{
+  inputs = {
+    tmux-sessionizer = {
+      url = "github:saberzero1/tmux-sessionizer";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+}
+```
+
+2. Import the Home Manager module:
+```nix
+{ inputs, ... }: {
+  imports = [ inputs.tmux-sessionizer.homeManagerModules.default ];
+  
+  programs.tmux-sessionizer = {
+    enable = true;
+    
+    # Optional configuration
+    searchPaths = [ "~/" "~/projects" ];
+    extraSearchPaths = [ "~/ghq:3" "~/Git:3" ];
+    maxDepth = 2;
+    sessionCommands = [ "nvim ." "npm run dev" ];
+    
+    # Enable logging for debugging
+    enableLogging = false;
+    logOutput = "file";
+  };
+}
+```
+
+#### Configuration Options
+
+All configuration options available in the Home Manager module:
+
+- **`enable`**: Enable tmux-sessionizer (default: `false`)
+- **`package`**: The package to use (default: `pkgs.tmux-sessionizer`)
+- **`searchPaths`**: Override default search paths (default: `[]`)
+- **`extraSearchPaths`**: Additional search paths with optional depth (default: `[]`)
+  - Example: `["~/ghq:3" "~/Git:3" "~/.config:2"]` - the number after `:` specifies search depth
+- **`maxDepth`**: Maximum search depth (default: `null`, uses 1)
+- **`sessionCommands`**: List of commands for session windows (default: `[]`)
+  - Access with `tmux-sessionizer -s 0`, `tmux-sessionizer -s 1`, etc.
+- **`enableLogging`**: Enable logging (default: `false`)
+- **`logOutput`**: Log output type - `"file"` or `"echo"` (default: `"file"`)
+- **`logFile`**: Path to log file (default: `"$HOME/.local/share/tmux-sessionizer/tmux-sessionizer.logs"`)
+- **`extraConfig`**: Extra bash configuration to append
+
+#### Example Configurations
+
+**Minimal setup:**
+```nix
+programs.tmux-sessionizer.enable = true;
+```
+
+**Full-featured setup:**
+```nix
+programs.tmux-sessionizer = {
+  enable = true;
+  searchPaths = [ "~/projects" "~/work" ];
+  extraSearchPaths = [ "~/github:3" ];
+  maxDepth = 2;
+  sessionCommands = [
+    "nvim ."
+    "npm run dev"
+    "docker-compose up"
+  ];
+  enableLogging = true;
+  extraConfig = ''
+    # Custom bash configuration
+    export MY_CUSTOM_VAR="value"
+  '';
+};
+```
+
+For complete examples including NixOS and nix-darwin configurations, see [examples/home-manager-example.nix](examples/home-manager-example.nix).
+
+### Manual Installation
+
+Download the script and place it in your PATH:
+```bash
+curl -o ~/.local/bin/tmux-sessionizer https://raw.githubusercontent.com/saberzero1/tmux-sessionizer/main/tmux-sessionizer
+chmod +x ~/.local/bin/tmux-sessionizer
+```
+
 ## Usage
 ```bash
 tmux-sessionizer [<partial name of session>]
