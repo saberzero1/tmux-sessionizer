@@ -21,15 +21,21 @@
 
             src = ./.;
 
-            buildInputs = [ pkgs.makeWrapper ];
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+
+            dontBuild = true;
 
             installPhase = ''
+              runHook preInstall
+
               mkdir -p $out/bin
               cp tmux-sessionizer $out/bin/tmux-sessionizer
               chmod +x $out/bin/tmux-sessionizer
 
               wrapProgram $out/bin/tmux-sessionizer \
                 --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.fzf pkgs.tmux pkgs.findutils pkgs.gnugrep pkgs.coreutils pkgs.gnused pkgs.bash ]}
+
+              runHook postInstall
             '';
 
             meta = with pkgs.lib; {
