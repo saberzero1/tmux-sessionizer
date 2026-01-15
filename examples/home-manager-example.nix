@@ -10,13 +10,17 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    darwin = {
+      url = "github:LnL7/nix-darwin";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     tmux-sessionizer = {
       url = "github:saberzero1/tmux-sessionizer";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { nixpkgs, home-manager, tmux-sessionizer, ... }: {
+  outputs = { nixpkgs, home-manager, darwin, tmux-sessionizer, ... }: {
     # Example for standalone home-manager on Linux/macOS
     homeConfigurations."user@hostname" = home-manager.lib.homeManagerConfiguration {
       pkgs = nixpkgs.legacyPackages.x86_64-linux; # or x86_64-darwin for macOS
@@ -67,7 +71,7 @@
     };
 
     # Example for nix-darwin (macOS)
-    darwinConfigurations.hostname = nixpkgs.lib.darwinSystem {
+    darwinConfigurations.hostname = darwin.lib.darwinSystem {
       system = "aarch64-darwin"; # or x86_64-darwin
       modules = [
         home-manager.darwinModules.home-manager
