@@ -73,3 +73,102 @@ This is for debugging purposes.
 TS_LOG=file | echo # echo will echo to stdout, file will write to TS_LOG_FILE
 TS_LOG_FILE=<file> # will write logs to <file> Defaults to ~/.local/share/tmux-sessionizer/tmux-sessionizer.logs
 ```
+
+## Nix Flake Installation
+
+This repository provides a Nix flake with a Home Manager module that works on both NixOS and nix-darwin.
+
+### Quick Install
+
+Run directly without installing:
+```bash
+nix run github:saberzero1/tmux-sessionizer
+```
+
+### Flake Input
+
+Add to your `flake.nix` inputs:
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    home-manager.url = "github:nix-community/home-manager";
+    tmux-sessionizer.url = "github:saberzero1/tmux-sessionizer";
+  };
+}
+```
+
+### Home Manager Module
+
+Import the module and configure:
+
+```nix
+{ inputs, ... }:
+{
+  imports = [ inputs.tmux-sessionizer.homeManagerModules.default ];
+
+  programs.tmux-sessionizer = {
+    enable = true;
+
+    # Override default search paths (optional)
+    # searchPaths = [ "~/" "~/projects" ];
+
+    # Add extra search paths with optional depth suffix (optional)
+    extraSearchPaths = [ "~/projects:3" "~/work:2" "~/.config:1" ];
+
+    # Maximum search depth when not specified per-path (optional, default: 1)
+    maxDepth = 2;
+
+    # Session commands accessible via tmux-sessionizer -s <index>
+    sessionCommands = [ "opencode ." "lazygit" "htop" ];
+
+    # Enable logging: "file" or "echo" (optional)
+    # enableLogging = "file";
+
+    # Custom log file path (optional)
+    # logFile = "~/.local/share/tmux-sessionizer/debug.log";
+  };
+}
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enable` | boolean | `false` | Enable tmux-sessionizer |
+| `package` | package | `<flake>.packages.${system}.default` | The tmux-sessionizer package to use |
+| `searchPaths` | list of strings | `[]` | Override default search paths (`TS_SEARCH_PATHS`) |
+| `extraSearchPaths` | list of strings | `[]` | Additional search paths, optionally with `:depth` suffix (`TS_EXTRA_SEARCH_PATHS`) |
+| `maxDepth` | int or null | `null` | Default max search depth (`TS_MAX_DEPTH`) |
+| `sessionCommands` | list of strings | `[]` | Commands for session windows (`TS_SESSION_COMMANDS`) |
+| `enableLogging` | `"file"`, `"echo"`, or null | `null` | Enable logging (`TS_LOG`) |
+| `logFile` | string or null | `null` | Custom log file path (`TS_LOG_FILE`) |
+
+### Using the Overlay
+
+You can also use the provided overlay to add `tmux-sessionizer` to your pkgs:
+
+```nix
+{ inputs, ... }:
+{
+  nixpkgs.overlays = [ inputs.tmux-sessionizer.overlays.default ];
+
+  # Then use it anywhere
+  environment.systemPackages = [ pkgs.tmux-sessionizer ];
+}
+```
+
+### Standalone Package
+
+Install without Home Manager:
+```bash
+# Add to profile
+nix profile install github:saberzero1/tmux-sessionizer
+
+# Or in a flake-based config
+environment.systemPackages = [ inputs.tmux-sessionizer.packages.${system}.default ];
+```
+
+## Credits
+
+This is a fork/derivative of the original [tmux-sessionizer by ThePrimeagen](https://github.com/ThePrimeagen/tmux-sessionizer).
