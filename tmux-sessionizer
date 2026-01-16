@@ -2,6 +2,7 @@
 CONFIG_FILE_NAME="tmux-sessionizer.conf"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/tmux-sessionizer"
 CONFIG_FILE="$CONFIG_DIR/$CONFIG_FILE_NAME"
+SESSION_TEMPLATE_FILE="$CONFIG_DIR/session-template"
 PANE_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tmux-sessionizer"
 PANE_CACHE_FILE="$PANE_CACHE_DIR/panes.cache"
 
@@ -150,12 +151,27 @@ hydrate() {
     if [[ ! -z $session_cmd ]]; then
         log "skipping hydrate for $1 -- using \"$session_cmd\" instead"
         return
-    elif [ -f "$2/.tmux-sessionizer" ]; then
+    fi
+
+    # If force template is set, always use session template
+    if [[ $TS_FORCE_SESSION_TEMPLATE == "true" ]]; then
+        if [ -f "$SESSION_TEMPLATE_FILE" ]; then
+            log "sourcing(forced template) $SESSION_TEMPLATE_FILE"
+            tmux send-keys -t "$1" "source $SESSION_TEMPLATE_FILE" c-M
+        fi
+        return
+    fi
+
+    # Normal precedence: local -> global -> template
+    if [ -f "$2/.tmux-sessionizer" ]; then
         log "sourcing(local) $2/.tmux-sessionizer"
         tmux send-keys -t "$1" "source $2/.tmux-sessionizer" c-M
     elif [ -f "$HOME/.tmux-sessionizer" ]; then
         log "sourcing(global) $HOME/.tmux-sessionizer"
         tmux send-keys -t "$1" "source $HOME/.tmux-sessionizer" c-M
+    elif [ -f "$SESSION_TEMPLATE_FILE" ]; then
+        log "sourcing(session template) $SESSION_TEMPLATE_FILE"
+        tmux send-keys -t "$1" "source $SESSION_TEMPLATE_FILE" c-M
     fi
 }
 

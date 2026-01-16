@@ -122,6 +122,17 @@ Import the module and configure:
     # Session commands accessible via tmux-sessionizer -s <index>
     sessionCommands = [ "opencode ." "lazygit" "htop" ];
 
+    # Session template: runs when no .tmux-sessionizer file exists (optional)
+    sessionTemplate = ''
+      # Example: auto-allow direnv
+      if command -v direnv &> /dev/null; then
+        eval "$(direnv export bash)"
+      fi
+    '';
+
+    # Force session template to always run instead of .tmux-sessionizer files
+    # forceSessionTemplate = true;
+
     # Enable logging: "file" or "echo" (optional)
     # enableLogging = "file";
 
@@ -141,6 +152,8 @@ Import the module and configure:
 | `extraSearchPaths` | list of strings | `[]` | Additional search paths, optionally with `:depth` suffix (`TS_EXTRA_SEARCH_PATHS`) |
 | `maxDepth` | int or null | `null` | Default max search depth (`TS_MAX_DEPTH`) |
 | `sessionCommands` | list of strings | `[]` | Commands for session windows (`TS_SESSION_COMMANDS`) |
+| `sessionTemplate` | multiline string or null | `null` | Bash script to run on new sessions (fallback when no `.tmux-sessionizer` file exists) |
+| `forceSessionTemplate` | boolean | `false` | Always use `sessionTemplate` instead of `.tmux-sessionizer` files |
 | `enableLogging` | `"file"`, `"echo"`, or null | `null` | Enable logging (`TS_LOG`) |
 | `logFile` | string or null | `null` | Custom log file path (`TS_LOG_FILE`) |
 

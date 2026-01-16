@@ -116,6 +116,32 @@
                 Path to log file. Defaults to ~/.local/share/tmux-sessionizer/tmux-sessionizer.logs
               '';
             };
+
+            sessionTemplate = lib.mkOption {
+              type = lib.types.nullOr lib.types.lines;
+              default = null;
+              example = ''
+                # Run on new session
+                if command -v direnv &> /dev/null; then
+                  direnv allow
+                fi
+              '';
+              description = ''
+                Bash script to run when a new tmux session starts.
+                This is used as a fallback when no .tmux-sessionizer file exists
+                in the project directory or home directory.
+                If null, no default template is used.
+              '';
+            };
+
+            forceSessionTemplate = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                If true, always use sessionTemplate instead of .tmux-sessionizer files.
+                This overrides both project-local and global .tmux-sessionizer files.
+              '';
+            };
           };
 
           config = lib.mkIf cfg.enable {
@@ -130,6 +156,7 @@
                   || cfg.sessionCommands != [ ]
                   || cfg.enableLogging != null
                   || cfg.logFile != null
+                  || cfg.forceSessionTemplate
                 )
                 {
                   text = lib.concatStringsSep "\n" (
@@ -145,8 +172,15 @@
                         "TS_SESSION_COMMANDS=(${lib.concatMapStringsSep " " (cmd: ''"${cmd}"'') cfg.sessionCommands})"
                     ++ lib.optional (cfg.enableLogging != null) "TS_LOG=${cfg.enableLogging}"
                     ++ lib.optional (cfg.logFile != null) "TS_LOG_FILE=${cfg.logFile}"
+                    ++ lib.optional cfg.forceSessionTemplate "TS_FORCE_SESSION_TEMPLATE=true"
                   );
                 };
+
+            # Write session template file if configured
+            xdg.configFile."tmux-sessionizer/session-template" = lib.mkIf (cfg.sessionTemplate != null) {
+              text = cfg.sessionTemplate;
+              executable = false;
+            };
           };
         };
     in
