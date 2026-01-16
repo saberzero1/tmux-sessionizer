@@ -236,15 +236,34 @@ if [[ ${#TS_EXTRA_SEARCH_PATHS[@]} -gt 0 ]]; then
     TS_SEARCH_PATHS+=("${TS_EXTRA_SEARCH_PATHS[@]}")
 fi
 
+# Version control directories to check for (highest to lowest priority after active sessions)
+VC_DIRS=(".git" ".jj" ".hg" ".svn" ".fossil" ".bzr" "_darcs")
+
+# Check if directory has version control
+has_vcs() {
+    local dir="$1"
+    for vc in "${VC_DIRS[@]}"; do
+        if [[ -e "$dir/$vc" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # utility function to find directories
 find_dirs() {
-    # list TMUX sessions
+    # list TMUX sessions (priority 1: active sessions)
     if [[ -n "${TMUX}" ]]; then
         current_session=$(tmux display-message -p '#S')
         tmux list-sessions -F "[TMUX] #{session_name}" 2>/dev/null | grep -vFx "[TMUX] $current_session"
     else
         tmux list-sessions -F "[TMUX] #{session_name}" 2>/dev/null
     fi
+
+    # Collect all directories first
+    local all_dirs=()
+    local vcs_dirs=()
+    local other_dirs=()
 
     # note: TS_SEARCH_PATHS is an array of paths to search for directories
     # if the path ends with :number, it will search for directories with a max depth of number ;)
@@ -258,8 +277,25 @@ find_dirs() {
             path="$entry"
         fi
 
-        [[ -d "$path" ]] && find "$path" -mindepth 1 -maxdepth "${depth:-${TS_MAX_DEPTH:-1}}" -path '*/.git' -prune -o -type d -print
+        if [[ -d "$path" ]]; then
+            while IFS= read -r dir; do
+                all_dirs+=("$dir")
+            done < <(find "$path" -mindepth 1 -maxdepth "${depth:-${TS_MAX_DEPTH:-1}}" -path '*/.git' -prune -o -type d -print)
+        fi
     done
+
+    # Sort directories: VCS repos first (priority 2), then others (priority 3)
+    for dir in "${all_dirs[@]}"; do
+        if has_vcs "$dir"; then
+            vcs_dirs+=("$dir")
+        else
+            other_dirs+=("$dir")
+        fi
+    done
+
+    # Output VCS directories first, then others
+    printf '%s\n' "${vcs_dirs[@]}"
+    printf '%s\n' "${other_dirs[@]}"
 }
 
 handle_session_cmd() {
