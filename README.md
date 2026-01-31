@@ -4,6 +4,12 @@ its a script that does everything awesome at all times
 ## Requirements
 fzf and tmux
 
+## Shell Support
+
+tmux-sessionizer is available in multiple shell flavors:
+- **Bash**: `tmux-sessionizer` (default)
+- **Nushell**: `tmux-sessionizer.nu`
+
 ## Usage
 ```bash
 tmux-sessionizer [<partial name of session>]
@@ -56,6 +62,48 @@ bindkey -s '\en' "tmux-sessionizer -s 2\n"
 bindkey -s '\es' "tmux-sessionizer -s 3\n"
 ```
 
+**nushell**
+```nu
+# Add to your config.nu
+$env.config.keybindings = ($env.config.keybindings | append [
+    {
+        name: tmux_sessionizer
+        modifier: control
+        keycode: char_f
+        mode: [emacs vi_normal vi_insert]
+        event: { send: executehostcommand cmd: "tmux neww tmux-sessionizer.nu" }
+    }
+    {
+        name: tmux_session_0
+        modifier: alt
+        keycode: char_h
+        mode: [emacs vi_normal vi_insert]
+        event: { send: executehostcommand cmd: "tmux neww tmux-sessionizer.nu -s 0" }
+    }
+    {
+        name: tmux_session_1
+        modifier: alt
+        keycode: char_t
+        mode: [emacs vi_normal vi_insert]
+        event: { send: executehostcommand cmd: "tmux neww tmux-sessionizer.nu -s 1" }
+    }
+    {
+        name: tmux_session_2
+        modifier: alt
+        keycode: char_n
+        mode: [emacs vi_normal vi_insert]
+        event: { send: executehostcommand cmd: "tmux neww tmux-sessionizer.nu -s 2" }
+    }
+    {
+        name: tmux_session_3
+        modifier: alt
+        keycode: char_s
+        mode: [emacs vi_normal vi_insert]
+        event: { send: executehostcommand cmd: "tmux neww tmux-sessionizer.nu -s 3" }
+    }
+])
+```
+
 **tmux**
 ```bash
 bind-key -r f run-shell "tmux neww ~/.local/bin/tmux-sessionizer"
@@ -68,10 +116,49 @@ bind-key -r M-s run-shell "tmux neww tmux-sessionizer -s 3"
 ## Enable Logs
 This is for debugging purposes.
 
+**Bash config** (`~/.config/tmux-sessionizer/tmux-sessionizer.conf`):
 ```bash
-# file: ~/.config/tmux-sessionizer/tmux-sessionizer.conf
 TS_LOG=file | echo # echo will echo to stdout, file will write to TS_LOG_FILE
 TS_LOG_FILE=<file> # will write logs to <file> Defaults to ~/.local/share/tmux-sessionizer/tmux-sessionizer.logs
+```
+
+**Nushell config** (`~/.config/tmux-sessionizer/tmux-sessionizer.nuon`):
+```nu
+{
+    log: "file"  # or "echo"
+    log_file: "~/.local/share/tmux-sessionizer/tmux-sessionizer.logs"
+}
+```
+
+## Nushell Configuration
+
+The Nushell version uses a `.nuon` configuration file instead of the bash `.conf` file.
+
+Create `~/.config/tmux-sessionizer/tmux-sessionizer.nuon`:
+```nu
+{
+    # Override default search paths (optional)
+    search_paths: ["~/" "~/projects" "~/work"]
+    
+    # Add extra search paths with optional depth suffix (optional)
+    # Format: "path:depth" or just "path"
+    extra_search_paths: ["~/ghq:3" "~/Git:3" "~/.config:2"]
+    
+    # Default max search depth when not specified per-path (default: 1)
+    max_depth: 2
+    
+    # Session commands accessible via tmux-sessionizer.nu -s <index>
+    session_commands: ["opencode ." "lazygit" "htop"]
+    
+    # Force session template to always run instead of .tmux-sessionizer files
+    force_session_template: false
+    
+    # Enable logging: "file" or "echo" (optional, null to disable)
+    log: null
+    
+    # Custom log file path (optional)
+    log_file: "~/.local/share/tmux-sessionizer/debug.log"
+}
 ```
 
 ## Nix Flake Installation
@@ -110,6 +197,9 @@ Import the module and configure:
   programs.tmux-sessionizer = {
     enable = true;
 
+    # Enable Nushell version (installs tmux-sessionizer.nu and generates NUON config)
+    # enableNushell = true;
+
     # Override default search paths (optional)
     # searchPaths = [ "~/" "~/projects" ];
 
@@ -147,7 +237,9 @@ Import the module and configure:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `enable` | boolean | `false` | Enable tmux-sessionizer |
+| `enableNushell` | boolean | `false` | Enable Nushell version (installs `tmux-sessionizer.nu` and generates NUON config) |
 | `package` | package | `<flake>.packages.${system}.default` | The tmux-sessionizer package to use |
+| `nushellPackage` | package | `<flake>.packages.${system}.tmux-sessionizer-nu` | The tmux-sessionizer Nushell package to use |
 | `searchPaths` | list of strings | `[]` | Override default search paths (`TS_SEARCH_PATHS`) |
 | `extraSearchPaths` | list of strings | `[]` | Additional search paths, optionally with `:depth` suffix (`TS_EXTRA_SEARCH_PATHS`) |
 | `maxDepth` | int or null | `null` | Default max search depth (`TS_MAX_DEPTH`) |
@@ -167,7 +259,10 @@ You can also use the provided overlay to add `tmux-sessionizer` to your pkgs:
   nixpkgs.overlays = [ inputs.tmux-sessionizer.overlays.default ];
 
   # Then use it anywhere
-  environment.systemPackages = [ pkgs.tmux-sessionizer ];
+  environment.systemPackages = [
+    pkgs.tmux-sessionizer      # Bash version
+    pkgs.tmux-sessionizer-nu   # Nushell version
+  ];
 }
 ```
 
@@ -175,11 +270,17 @@ You can also use the provided overlay to add `tmux-sessionizer` to your pkgs:
 
 Install without Home Manager:
 ```bash
-# Add to profile
+# Add to profile (Bash version)
 nix profile install github:saberzero1/tmux-sessionizer
 
+# Add Nushell version to profile
+nix profile install github:saberzero1/tmux-sessionizer#tmux-sessionizer-nu
+
 # Or in a flake-based config
-environment.systemPackages = [ inputs.tmux-sessionizer.packages.${system}.default ];
+environment.systemPackages = [
+  inputs.tmux-sessionizer.packages.${system}.default           # Bash version
+  inputs.tmux-sessionizer.packages.${system}.tmux-sessionizer-nu  # Nushell version
+];
 ```
 
 ## Credits

@@ -32,6 +32,34 @@
         let
           cfg = config.programs.tmux-sessionizer;
           settingsFormat = pkgs.formats.keyValue { };
+
+          # Generate NUON config content
+          nuonConfig = lib.concatStringsSep "\n" (
+            [ "{" ]
+            ++
+              lib.optional (cfg.searchPaths != [ ])
+                "search_paths: [${lib.concatMapStringsSep " " (p: ''"${p}"'') cfg.searchPaths}]"
+            ++
+              lib.optional (cfg.extraSearchPaths != [ ])
+                "extra_search_paths: [${lib.concatMapStringsSep " " (p: ''"${p}"'') cfg.extraSearchPaths}]"
+            ++ lib.optional (cfg.maxDepth != null) "    max_depth: ${toString cfg.maxDepth}"
+            ++
+              lib.optional (cfg.sessionCommands != [ ])
+                "session_commands: [${lib.concatMapStringsSep " " (cmd: ''"${cmd}"'') cfg.sessionCommands}]"
+            ++ lib.optional cfg.forceSessionTemplate "    force_session_template: true"
+            ++ lib.optional (cfg.enableLogging != null) ''log: "${cfg.enableLogging}"''
+            ++ lib.optional (cfg.logFile != null) ''log_file: "${cfg.logFile}"''
+            ++ [ "}" ]
+          );
+
+          hasAnyConfig =
+            cfg.searchPaths != [ ]
+            || cfg.extraSearchPaths != [ ]
+            || cfg.maxDepth != null
+            || cfg.sessionCommands != [ ]
+            || cfg.enableLogging != null
+            || cfg.logFile != null
+            || cfg.forceSessionTemplate;
         in
         {
           options.programs.tmux-sessionizer = {
@@ -42,6 +70,23 @@
               default = self.packages.${pkgs.system}.default;
               defaultText = lib.literalExpression "inputs.tmux-sessionizer.packages.\${pkgs.system}.default";
               description = "The tmux-sessionizer package to use.";
+            };
+
+            enableNushell = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Enable the Nushell version of tmux-sessionizer.
+                This will install tmux-sessionizer.nu and generate
+                a NUON configuration file alongside the bash config.
+              '';
+            };
+
+            nushellPackage = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.system}.tmux-sessionizer-nu;
+              defaultText = lib.literalExpression "inputs.tmux-sessionizer.packages.\${pkgs.system}.tmux-sessionizer-nu";
+              description = "The tmux-sessionizer nushell package to use.";
             };
 
             searchPaths = lib.mkOption {
@@ -145,35 +190,32 @@
           };
 
           config = lib.mkIf cfg.enable {
-            home.packages = [ cfg.package ];
+            home.packages = [ cfg.package ] ++ lib.optional cfg.enableNushell cfg.nushellPackage;
 
-            xdg.configFile."tmux-sessionizer/tmux-sessionizer.conf" =
-              lib.mkIf
-                (
+            # Bash config file
+            xdg.configFile."tmux-sessionizer/tmux-sessionizer.conf" = lib.mkIf hasAnyConfig {
+              text = lib.concatStringsSep "\n" (
+                lib.optional (
                   cfg.searchPaths != [ ]
-                  || cfg.extraSearchPaths != [ ]
-                  || cfg.maxDepth != null
-                  || cfg.sessionCommands != [ ]
-                  || cfg.enableLogging != null
-                  || cfg.logFile != null
-                  || cfg.forceSessionTemplate
-                )
+                ) "TS_SEARCH_PATHS=(${lib.concatStringsSep " " cfg.searchPaths})"
+                ++ lib.optional (
+                  cfg.extraSearchPaths != [ ]
+                ) "TS_EXTRA_SEARCH_PATHS=(${lib.concatStringsSep " " cfg.extraSearchPaths})"
+                ++ lib.optional (cfg.maxDepth != null) "TS_MAX_DEPTH=${toString cfg.maxDepth}"
+                ++
+                  lib.optional (cfg.sessionCommands != [ ])
+                    "TS_SESSION_COMMANDS=(${lib.concatMapStringsSep " " (cmd: ''"${cmd}"'') cfg.sessionCommands})"
+                ++ lib.optional (cfg.enableLogging != null) "TS_LOG=${cfg.enableLogging}"
+                ++ lib.optional (cfg.logFile != null) "TS_LOG_FILE=${cfg.logFile}"
+                ++ lib.optional cfg.forceSessionTemplate "TS_FORCE_SESSION_TEMPLATE=true"
+              );
+            };
+
+            # Nushell config file (NUON format)
+            xdg.configFile."tmux-sessionizer/tmux-sessionizer.nuon" =
+              lib.mkIf (cfg.enableNushell && hasAnyConfig)
                 {
-                  text = lib.concatStringsSep "\n" (
-                    lib.optional (
-                      cfg.searchPaths != [ ]
-                    ) "TS_SEARCH_PATHS=(${lib.concatStringsSep " " cfg.searchPaths})"
-                    ++ lib.optional (
-                      cfg.extraSearchPaths != [ ]
-                    ) "TS_EXTRA_SEARCH_PATHS=(${lib.concatStringsSep " " cfg.extraSearchPaths})"
-                    ++ lib.optional (cfg.maxDepth != null) "TS_MAX_DEPTH=${toString cfg.maxDepth}"
-                    ++
-                      lib.optional (cfg.sessionCommands != [ ])
-                        "TS_SESSION_COMMANDS=(${lib.concatMapStringsSep " " (cmd: ''"${cmd}"'') cfg.sessionCommands})"
-                    ++ lib.optional (cfg.enableLogging != null) "TS_LOG=${cfg.enableLogging}"
-                    ++ lib.optional (cfg.logFile != null) "TS_LOG_FILE=${cfg.logFile}"
-                    ++ lib.optional cfg.forceSessionTemplate "TS_FORCE_SESSION_TEMPLATE=true"
-                  );
+                  text = nuonConfig;
                 };
 
             # Write session template file if configured
@@ -234,12 +276,59 @@
             };
           };
 
+          tmux-sessionizer-nu = pkgs.stdenv.mkDerivation {
+            pname = "tmux-sessionizer-nu";
+            version = "0.1.0";
+
+            src = ./.;
+
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+
+            # Runtime dependencies
+            buildInputs = [ pkgs.nushell ];
+
+            installPhase = ''
+              runHook preInstall
+
+              mkdir -p $out/bin
+              cp tmux-sessionizer.nu $out/bin/tmux-sessionizer.nu
+              chmod +x $out/bin/tmux-sessionizer.nu
+
+              wrapProgram $out/bin/tmux-sessionizer.nu \
+                --prefix PATH : ${
+                  pkgs.lib.makeBinPath [
+                    pkgs.nushell
+                    pkgs.tmux
+                    pkgs.fzf
+                    pkgs.findutils
+                    pkgs.procps
+                    pkgs.coreutils
+                  ]
+                }
+
+              runHook postInstall
+            '';
+
+            meta = with pkgs.lib; {
+              description = "Fuzzy-finder for tmux sessions (Nushell version)";
+              homepage = "https://github.com/ThePrimeagen/tmux-sessionizer";
+              license = licenses.mit;
+              maintainers = [ ];
+              platforms = platforms.unix;
+              mainProgram = "tmux-sessionizer.nu";
+            };
+          };
+
           default = self.packages.${system}.tmux-sessionizer;
         };
 
         apps = {
           tmux-sessionizer = flake-utils.lib.mkApp {
             drv = self.packages.${system}.tmux-sessionizer;
+          };
+          tmux-sessionizer-nu = flake-utils.lib.mkApp {
+            drv = self.packages.${system}.tmux-sessionizer-nu;
+            name = "tmux-sessionizer.nu";
           };
           default = self.apps.${system}.tmux-sessionizer;
         };
@@ -249,6 +338,7 @@
             tmux
             fzf
             bash
+            nushell
           ];
         };
       }
@@ -266,6 +356,7 @@
       # Overlay for easy integration
       overlays.default = final: prev: {
         tmux-sessionizer = self.packages.${prev.system}.tmux-sessionizer;
+        tmux-sessionizer-nu = self.packages.${prev.system}.tmux-sessionizer-nu;
       };
     };
 }
